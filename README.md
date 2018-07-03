@@ -1,2 +1,1 @@
-# sr
-Image and video super resolution
+# Image and video super resolution
