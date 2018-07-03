@@ -1,6 +1,6 @@
 import tensorflow as tf
 from .model import Model
-from .warp import image_warp
+from .image_warp import image_warp
 from .dataset import Dataset
 
 
