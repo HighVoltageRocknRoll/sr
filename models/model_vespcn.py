@@ -1,18 +1,12 @@
 import tensorflow as tf
 from .model import Model
 from .image_warp import image_warp
-from .dataset import Dataset
 
 
 class VESPCN(Model):
     def __init__(self, args):
         super().__init__(args)
-        self._save_num = args.save_num
-        if hasattr(args, 'shuffle_buffer_size'):
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path, args.shuffle_buffer_size)
-        else:
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path)
-        self._prediction_offset = self.dataset.scale_factor * 5
+        self._prediction_offset = self._scale_factor * 5
         self._use_mc = args.use_mc
         if hasattr(args, 'mc_independent'):
             self._mc_independent = args.mc_independent
@@ -29,7 +23,17 @@ class VESPCN(Model):
 
         return [lr_batch, hr_batch], initializer
 
+    def get_placeholder(self):
+        input_ph = tf.placeholder(tf.float32, shape=[1, None, None, 3], name="x")
+
+        return [input_ph]
+
     def load_model(self, data_batch):
+        if self._using_dataset:
+            padding = 'valid'
+        else:
+            padding = 'same'
+
         if self._use_mc:
             with tf.variable_scope('mc'):
                 neighboring_frames = tf.expand_dims(tf.concat([data_batch[0][:, :, :, 0], data_batch[0][:, :, :, 2]],
@@ -48,10 +52,13 @@ class VESPCN(Model):
                     net = tf.layers.conv2d(net, 32, 3, strides=1, activation=tf.nn.tanh, padding='same',
                                            name='conv5', kernel_initializer=tf.keras.initializers.he_normal())
                     coarse_flow = 36.0 * tf.depth_to_space(net, 4)
-                    tf.summary.image('Coarse_flow_y', (coarse_flow[:, :, :, 0:1] + 36.0) / 72.0,
-                                     max_outputs=self._save_num)
-                    tf.summary.image('Coarse_flow_x', (coarse_flow[:, :, :, 1:2] + 36.0) / 72.0,
-                                     max_outputs=self._save_num)
+
+                    if self._using_dataset:
+                        tf.summary.image('Coarse_flow_y', (coarse_flow[:, :, :, 0:1] + 36.0) / 72.0,
+                                         max_outputs=self._save_num)
+                        tf.summary.image('Coarse_flow_x', (coarse_flow[:, :, :, 1:2] + 36.0) / 72.0,
+                                         max_outputs=self._save_num)
+
                     warped_frames = image_warp(neighboring_frames, coarse_flow)
 
                 ff_input = tf.concat([lr_input, coarse_flow, warped_frames], axis=3)
@@ -68,10 +75,13 @@ class VESPCN(Model):
                                            name='conv5', kernel_initializer=tf.keras.initializers.he_normal())
                     fine_flow = 36.0 * tf.depth_to_space(net, 2)
                     flow = coarse_flow + fine_flow
-                    tf.summary.image('Flow_y', (flow[:, :, :, 0:1] + 36.0) / 72.0,
-                                     max_outputs=self._save_num)
-                    tf.summary.image('Flow_x', (flow[:, :, :, 1:2] + 36.0) / 72.0,
-                                     max_outputs=self._save_num)
+
+                    if self._using_dataset:
+                        tf.summary.image('Flow_y', (flow[:, :, :, 0:1] + 36.0) / 72.0,
+                                         max_outputs=self._save_num)
+                        tf.summary.image('Flow_x', (flow[:, :, :, 1:2] + 36.0) / 72.0,
+                                         max_outputs=self._save_num)
+
                     warped_frames = image_warp(neighboring_frames, flow)
             if self._mc_independent:
                 sr_input = tf.concat([tf.stop_gradient(warped_frames[:tf.shape(data_batch[0])[0]]),
@@ -82,39 +92,45 @@ class VESPCN(Model):
                                       data_batch[0][:, :, :, 1:2],
                                       warped_frames[tf.shape(data_batch[0])[0]:]], axis=3)
 
-            tf.summary.image('Low_resolution_warped0', tf.expand_dims(sr_input[:, 5:-5, 5:-5, 0], axis=3),
-                             max_outputs=self._save_num)
-            tf.summary.image('Low_resolution_warped2', tf.expand_dims(sr_input[:, 5:-5, 5:-5, 2], axis=3),
-                             max_outputs=self._save_num)
+            if self._using_dataset:
+                tf.summary.image('Low_resolution_warped0', tf.expand_dims(sr_input[:, 5:-5, 5:-5, 0], axis=3),
+                                 max_outputs=self._save_num)
+                tf.summary.image('Low_resolution_warped2', tf.expand_dims(sr_input[:, 5:-5, 5:-5, 2], axis=3),
+                                 max_outputs=self._save_num)
         else:
             flow = []
             warped_frames = []
             sr_input = data_batch[0]
 
         with tf.variable_scope('vespcn'):
-            net = tf.layers.conv2d(sr_input, 24, 3, activation=tf.nn.relu, padding='valid', name='conv1',
+            if not self._using_dataset:
+                sr_input = tf.pad(sr_input, [[0, 0], [5, 5], [5, 5], [0, 0]], 'SYMMETRIC')
+            net = tf.layers.conv2d(sr_input, 24, 3, activation=tf.nn.relu, padding=padding, name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv2',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv3',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv3',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv4',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv4',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, self.dataset.scale_factor ** 2, 3, activation=None, padding='valid',
+            net = tf.layers.conv2d(net, self._scale_factor ** 2, 3, activation=None, padding=padding,
                                    name='conv5', kernel_initializer=tf.keras.initializers.he_normal())
-            predicted_batch = tf.depth_to_space(net, self.dataset.scale_factor, name='prediction')
+            if not self._using_dataset:
+                net = net[:, 5:-5, 5:-5, :]
+            predicted_batch = tf.depth_to_space(net, self._scale_factor, name='prediction')
 
-        tf.summary.image('Low_resolution0', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 0], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('Low_resolution1', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 1], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('Low_resolution2', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 2], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution',
-                         data_batch[1][:, self._prediction_offset:-self._prediction_offset,
-                                       self._prediction_offset:-self._prediction_offset],
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
+        if self._using_dataset:
+            tf.summary.image('Low_resolution0', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 0], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('Low_resolution1', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 1], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('Low_resolution2', tf.expand_dims(data_batch[0][:, 5:-5, 5:-5, 2], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution',
+                             data_batch[1][:, self._prediction_offset:-self._prediction_offset,
+                                           self._prediction_offset:-self._prediction_offset],
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
 
         return flow, warped_frames, predicted_batch
 

@@ -1,15 +1,38 @@
 from abc import ABC, abstractmethod
 import tensorflow as tf
 import json
-
+from .dataset import Dataset
 
 class Model(ABC):
     @abstractmethod
     def __init__(self, args):
         self.lr_multipliers = {}
+        if hasattr(args, 'dataset_path') and hasattr(args, 'dataset_info_path'):
+            if hasattr(args, 'shuffle_buffer_size'):
+                self.dataset = Dataset(args.batch_size,
+                                       args.dataset_path,
+                                       args.dataset_info_path,
+                                       args.shuffle_buffer_size)
+            else:
+                self.dataset = Dataset(args.batch_size,
+                                       args.dataset_path,
+                                       args.dataset_info_path)
+            self._scale_factor = self.dataset.scale_factor
+            if hasattr(args, 'save_num'):
+                self._save_num = args.save_num
+            else:
+                self._save_num = 1
+            self._using_dataset = True
+        else:
+            self._using_dataset = False
+            self._scale_factor = args.scale_factor
 
     @abstractmethod
     def get_data(self):
+        pass
+
+    @abstractmethod
+    def get_placeholder(self):
         pass
 
     @abstractmethod

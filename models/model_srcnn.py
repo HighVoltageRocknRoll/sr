@@ -1,18 +1,12 @@
 import tensorflow as tf
 from .model import Model
-from .dataset import Dataset
 
 
 class SRCNN(Model):
     def __init__(self, args):
         super().__init__(args)
-        self._save_num = args.save_num
-        if hasattr(args, 'shuffle_buffer_size'):
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path, args.shuffle_buffer_size)
-        else:
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path)
         self._prediction_offset = 6
-        self._lr_offset = self._prediction_offset // self.dataset.scale_factor
+        self._lr_offset = self._prediction_offset // self._scale_factor
 
     def get_data(self):
         data_batch, initializer = self.dataset.get_data()
@@ -22,18 +16,33 @@ class SRCNN(Model):
 
         return [lr_batch, hr_batch], initializer
 
+    def get_placeholder(self):
+        input_ph = tf.placeholder(tf.float32, shape=[1, None, None, 1], name="x")
+
+        return [input_ph]
+
     def load_model(self, data_batch):
         lr_batch = data_batch[0]
 
+        if self._using_dataset:
+            padding = 'valid'
+        else:
+            padding = 'same'
+
         with tf.variable_scope('srcnn'):
-            net = tf.image.resize_bicubic(lr_batch, (self.dataset.scale_factor * lr_batch.shape[1],
-                                                     self.dataset.scale_factor * lr_batch.shape[2]), align_corners=True)
-            net = tf.layers.conv2d(net, 64, 9, activation=tf.nn.relu, padding='valid', name='conv1',
+            if self._using_dataset:
+                net = tf.image.resize_bicubic(lr_batch, (self._scale_factor * lr_batch.shape[1],
+                                                         self._scale_factor * lr_batch.shape[2]), align_corners=True)
+            else:
+                net = tf.pad(lr_batch, [[0, 0], [6, 6], [6, 6], [0, 0]], 'SYMMETRIC')
+            net = tf.layers.conv2d(net, 64, 9, activation=tf.nn.relu, padding=padding, name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 32, 1, activation=tf.nn.relu, padding='valid', name='conv2',
+            net = tf.layers.conv2d(net, 32, 1, activation=tf.nn.relu, padding=padding, name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 1, 5, activation=None, padding='valid',
+            net = tf.layers.conv2d(net, 1, 5, activation=None, padding=padding,
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
+            if not self._using_dataset:
+                net = net[:, 6:-6, 6:-6, :]
             predicted_batch = tf.clip_by_value(net, 0.0, 1.0)
 
         srcnn_variables = tf.trainable_variables(scope='srcnn')
@@ -43,14 +52,15 @@ class SRCNN(Model):
             else:
                 self.lr_multipliers[variable.name] = 1.0
 
-        tf.summary.image('Low_resolution',
-                         data_batch[0][:, self._lr_offset:-self._lr_offset, self._lr_offset:-self._lr_offset],
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution',
-                         data_batch[1][:, self._prediction_offset:-self._prediction_offset,
-                                       self._prediction_offset:-self._prediction_offset],
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
+        if self._using_dataset:
+            tf.summary.image('Low_resolution',
+                             data_batch[0][:, self._lr_offset:-self._lr_offset, self._lr_offset:-self._lr_offset],
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution',
+                             data_batch[1][:, self._prediction_offset:-self._prediction_offset,
+                                           self._prediction_offset:-self._prediction_offset],
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
 
         return predicted_batch
 

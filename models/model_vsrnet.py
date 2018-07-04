@@ -1,18 +1,12 @@
 import tensorflow as tf
 from .model import Model
-from .dataset import Dataset
 
 
 class VSRnet(Model):
     def __init__(self, args):
         super().__init__(args)
-        self._save_num = args.save_num
-        if hasattr(args, 'shuffle_buffer_size'):
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path, args.shuffle_buffer_size)
-        else:
-            self.dataset = Dataset(args.batch_size, args.dataset_path, args.dataset_info_path)
         self._prediction_offset = 8
-        self._lr_offset = self._prediction_offset // self.dataset.scale_factor
+        self._lr_offset = self._prediction_offset // self._scale_factor
 
     def get_data(self):
         data_batch, initializer = self.dataset.get_data()
@@ -24,18 +18,28 @@ class VSRnet(Model):
 
         return [lr_batch, hr_batch], initializer
 
+    def get_placeholder(self):
+        input_ph = tf.placeholder(tf.float32, shape=[1, None, None, 3], name="x")
+
+        return [input_ph]
+
     def load_model(self, data_batch):
         lr_batch = data_batch[0]
 
         with tf.variable_scope('vsrnet'):
-            net = tf.image.resize_bicubic(lr_batch, (self.dataset.scale_factor * lr_batch.shape[1],
-                                                     self.dataset.scale_factor * lr_batch.shape[2]), align_corners=True)
+            if self._using_dataset:
+                net = tf.image.resize_bicubic(lr_batch, (self._scale_factor * lr_batch.shape[1],
+                                                         self._scale_factor * lr_batch.shape[2]), align_corners=True)
+            else:
+                net = tf.pad(lr_batch, [[0, 0], [8, 8], [8, 8], [0, 0]], 'SYMMETRIC')
             net = tf.layers.conv2d(net, 64, 9, activation=tf.nn.relu, padding='valid', name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
             net = tf.layers.conv2d(net, 32, 5, activation=tf.nn.relu, padding='valid', name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
             net = tf.layers.conv2d(net, 1, 5, activation=None, padding='valid',
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
+            if not self._using_dataset:
+                net = net[:, 8:-8, 8:-8, :]
             predicted_batch = tf.clip_by_value(net, 0.0, 1.0)
 
         vsrnet_variables = tf.trainable_variables(scope='vsrnet')
@@ -45,23 +49,24 @@ class VSRnet(Model):
             else:
                 self.lr_multipliers[variable.name] = 1.0
 
-        tf.summary.image('Low_resolution0',
-                         tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
-                                                      self._lr_offset:-self._lr_offset, 0], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('Low_resolution1',
-                         tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
-                                                      self._lr_offset:-self._lr_offset, 1], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('Low_resolution2',
-                         tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
-                                                      self._lr_offset:-self._lr_offset, 2], axis=3),
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution',
-                         data_batch[1][:, self._prediction_offset:-self._prediction_offset,
-                                       self._prediction_offset:-self._prediction_offset],
-                         max_outputs=self._save_num)
-        tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
+        if self._using_dataset:
+            tf.summary.image('Low_resolution0',
+                             tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
+                                                          self._lr_offset:-self._lr_offset, 0], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('Low_resolution1',
+                             tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
+                                                          self._lr_offset:-self._lr_offset, 1], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('Low_resolution2',
+                             tf.expand_dims(data_batch[0][:, self._lr_offset:-self._lr_offset,
+                                                          self._lr_offset:-self._lr_offset, 2], axis=3),
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution',
+                             data_batch[1][:, self._prediction_offset:-self._prediction_offset,
+                                           self._prediction_offset:-self._prediction_offset],
+                             max_outputs=self._save_num)
+            tf.summary.image('High_resolution_prediction', predicted_batch, max_outputs=self._save_num)
 
         return predicted_batch
 
@@ -90,7 +95,7 @@ class VSRnet(Model):
 
     def calculate_metrics(self, data_batch, predicted_batch):
         diff = data_batch[1][:, self._prediction_offset:-self._prediction_offset,
-               self._prediction_offset:-self._prediction_offset] - predicted_batch
+                             self._prediction_offset:-self._prediction_offset] - predicted_batch
         diff_sqr = tf.square(diff)
 
         mse = ('MSE', tf.reduce_mean(diff_sqr, axis=[1, 2, 3]))
