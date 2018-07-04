@@ -18,7 +18,7 @@ STEPS_PER_LOG = 5
 
 
 def get_arguments():
-    parser = argparse.ArgumentParser(description='train one of the models for image and video super-resolution')
+    parser = argparse.ArgumentParser(description='evaluate one of the models for image and video super-resolution')
     parser.add_argument('--model', type=str, default='srcnn', choices=['srcnn', 'espcn', 'vespcn', 'vsrnet'],
                         help='What model to evaluate')
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE,
