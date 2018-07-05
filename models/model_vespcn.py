@@ -29,11 +29,6 @@ class VESPCN(Model):
         return [input_ph]
 
     def load_model(self, data_batch):
-        if self._using_dataset:
-            padding = 'valid'
-        else:
-            padding = 'same'
-
         if self._use_mc:
             with tf.variable_scope('mc'):
                 neighboring_frames = tf.expand_dims(tf.concat([data_batch[0][:, :, :, 0], data_batch[0][:, :, :, 2]],
@@ -105,18 +100,16 @@ class VESPCN(Model):
         with tf.variable_scope('vespcn'):
             if not self._using_dataset:
                 sr_input = tf.pad(sr_input, [[0, 0], [5, 5], [5, 5], [0, 0]], 'SYMMETRIC')
-            net = tf.layers.conv2d(sr_input, 24, 3, activation=tf.nn.relu, padding=padding, name='conv1',
+            net = tf.layers.conv2d(sr_input, 24, 3, activation=tf.nn.relu, padding='valid', name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv2',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv3',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv3',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding=padding, name='conv4',
+            net = tf.layers.conv2d(net, 24, 3, activation=tf.nn.relu, padding='valid', name='conv4',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, self._scale_factor ** 2, 3, activation=None, padding=padding,
+            net = tf.layers.conv2d(net, self._scale_factor ** 2, 3, activation=None, padding='valid',
                                    name='conv5', kernel_initializer=tf.keras.initializers.he_normal())
-            if not self._using_dataset:
-                net = net[:, 5:-5, 5:-5, :]
             predicted_batch = tf.depth_to_space(net, self._scale_factor, name='prediction')
 
         if self._using_dataset:

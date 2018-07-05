@@ -23,22 +23,15 @@ class ESPCN(Model):
     def load_model(self, data_batch):
         lr_batch = data_batch[0]
 
-        if self._using_dataset:
-            padding = 'valid'
-        else:
-            padding = 'same'
-
         with tf.variable_scope('espcn'):
             if not self._using_dataset:
                 lr_batch = tf.pad(lr_batch, [[0, 0], [4, 4], [4, 4], [0, 0]], 'SYMMETRIC')
-            net = tf.layers.conv2d(lr_batch, 64, 5, activation=tf.nn.tanh, padding=padding, name='conv1',
+            net = tf.layers.conv2d(lr_batch, 64, 5, activation=tf.nn.tanh, padding='valid', name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 32, 3, activation=tf.nn.tanh, padding=padding, name='conv2',
+            net = tf.layers.conv2d(net, 32, 3, activation=tf.nn.tanh, padding='valid', name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, self._scale_factor ** 2, 3, activation=tf.nn.sigmoid, padding=padding,
+            net = tf.layers.conv2d(net, self._scale_factor ** 2, 3, activation=tf.nn.sigmoid, padding='valid',
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
-            if not self._using_dataset:
-                net = net[:, 4:-4, 4:-4, :]
             predicted_batch = tf.depth_to_space(net, self._scale_factor, name='prediction')
 
         espcn_variables = tf.trainable_variables(scope='espcn')

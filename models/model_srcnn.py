@@ -24,25 +24,18 @@ class SRCNN(Model):
     def load_model(self, data_batch):
         lr_batch = data_batch[0]
 
-        if self._using_dataset:
-            padding = 'valid'
-        else:
-            padding = 'same'
-
         with tf.variable_scope('srcnn'):
             if self._using_dataset:
                 net = tf.image.resize_bicubic(lr_batch, (self._scale_factor * lr_batch.shape[1],
                                                          self._scale_factor * lr_batch.shape[2]), align_corners=True)
             else:
                 net = tf.pad(lr_batch, [[0, 0], [6, 6], [6, 6], [0, 0]], 'SYMMETRIC')
-            net = tf.layers.conv2d(net, 64, 9, activation=tf.nn.relu, padding=padding, name='conv1',
+            net = tf.layers.conv2d(net, 64, 9, activation=tf.nn.relu, padding='valid', name='conv1',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 32, 1, activation=tf.nn.relu, padding=padding, name='conv2',
+            net = tf.layers.conv2d(net, 32, 1, activation=tf.nn.relu, padding='valid', name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 1, 5, activation=None, padding=padding,
+            net = tf.layers.conv2d(net, 1, 5, activation=None, padding='valid',
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
-            if not self._using_dataset:
-                net = net[:, 6:-6, 6:-6, :]
             predicted_batch = tf.clip_by_value(net, 0.0, 1.0)
 
         srcnn_variables = tf.trainable_variables(scope='srcnn')

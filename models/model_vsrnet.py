@@ -38,8 +38,6 @@ class VSRnet(Model):
                                    kernel_initializer=tf.keras.initializers.he_normal())
             net = tf.layers.conv2d(net, 1, 5, activation=None, padding='valid',
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
-            if not self._using_dataset:
-                net = net[:, 8:-8, 8:-8, :]
             predicted_batch = tf.clip_by_value(net, 0.0, 1.0)
 
         vsrnet_variables = tf.trainable_variables(scope='vsrnet')
