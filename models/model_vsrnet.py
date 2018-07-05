@@ -36,9 +36,9 @@ class VSRnet(Model):
                                    kernel_initializer=tf.keras.initializers.he_normal())
             net = tf.layers.conv2d(net, 32, 5, activation=tf.nn.relu, padding='valid', name='conv2',
                                    kernel_initializer=tf.keras.initializers.he_normal())
-            net = tf.layers.conv2d(net, 1, 5, activation=None, padding='valid',
+            net = tf.layers.conv2d(net, 1, 5, activation=tf.nn.relu, padding='valid',
                                    name='conv3', kernel_initializer=tf.keras.initializers.he_normal())
-            predicted_batch = tf.clip_by_value(net, 0.0, 1.0)
+            predicted_batch = tf.maximum(net, 0.0)
 
         vsrnet_variables = tf.trainable_variables(scope='vsrnet')
         for variable in vsrnet_variables:

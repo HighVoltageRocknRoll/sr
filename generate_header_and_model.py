@@ -99,6 +99,15 @@ def main():
         saver.restore(sess, args.ckpt_path)
 
         with open(os.path.join(args.output_folder, 'dnn_' + args.model + '.h'), 'w') as header:
+            header.write('/**\n')
+            header.write(' * @file\n')
+            header.write(' * Default cnn weights for x' + str(args.scale_factor) + ' upscaling with ' +
+                         args.model + ' model.\n')
+            header.write(' */\n\n')
+
+            header.write('#ifndef AVFILTER_DNN_' + args.model.upper() + '_H\n')
+            header.write('#define AVFILTER_DNN_' + args.model.upper() + '_H\n')
+
             variables = tf.trainable_variables()
             var_dict = OrderedDict()
             for variable in variables:
@@ -128,6 +137,14 @@ def main():
                 header.write('\n')
             header.write('};\n')
 
+            header.write('\nstatic const int ' + args.model + '_consts_dims_len[] = {\n')
+            for i in range(len(names)):
+                header.write('    ' + str(len(var_dict[names[i]].shape)))
+                if i != len(names) - 1:
+                    header.write(',')
+                header.write('\n')
+            header.write('};\n')
+
             activations = ['Relu', 'Tanh', 'Sigmoid']
             activations_in_graph = [n.name.split('/')[-1] for n in tf.get_default_graph().as_graph_def().node
                                     if n.name.split('/')[-1] in activations]
@@ -140,11 +157,13 @@ def main():
 
             header.write('\nstatic const char* ' + args.model + '_activations[] = {\n')
             for i in range(len(activations_in_graph)):
-                header.write('    ' + args.model + '_' + activations_in_graph[i])
+                header.write('    ' + args.model + '_' + activations_in_graph[i].lower())
                 if i != len(activations_in_graph) - 1:
                     header.write(',')
                 header.write('\n')
-            header.write('};\n')
+            header.write('};\n\n')
+
+            header.write('#endif\n')
 
         output_graph_def = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, ['y'])
         tf.train.write_graph(output_graph_def, args.output_folder, args.model + '.pb', as_text=False)
