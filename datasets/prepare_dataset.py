@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import json
 import tensorflow as tf
+from scipy.misc import imresize
 
 
 class SceneChangeDetector:
@@ -92,6 +93,10 @@ def process_video(video_path, scd, writer, args):
     scd_ind = 0
     examples_num = 0
     frames = []
+    if args.type == 'full' and not args.crop:
+        args.crop = True
+        args.crop_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        args.crop_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
     for i in tqdm(range(frames_number), total=frames_number, unit='frame'):
         ret, frame = video.read()
         if i == first_scene_frame:
@@ -111,13 +116,15 @@ def process_video(video_path, scd, writer, args):
             frames_lr = []
             frame_hr = []
             for k in range(len(frames)):
-                if args.type == 'full' and (frames[k].shape[0] != args.crop_height or
-                                            frames[k].shape[1] != args.crop_width):
+                if args.crop and (frames[k].shape[0] != args.crop_height or frames[k].shape[1] != args.crop_width):
                     frames[k] = frames[k][:args.crop_height, :args.crop_width]
                 lr_h = frames[k].shape[0] // args.scale_factor
                 lr_w = frames[k].shape[1] // args.scale_factor
                 frames[k] = frames[k][:lr_h * args.scale_factor, :lr_w * args.scale_factor]
-                frame_lr = cv2.resize(frames[k], (lr_w, lr_h), interpolation=cv2.INTER_CUBIC)
+                frame_lr = imresize(frames[k], (lr_h, lr_w), interp='bicubic')
+                if args.blur:
+                    frame_lr = cv2.GaussianBlur(frame_lr, (args.blur_size, args.blur_size), args.blur_sigma,
+                                                borderType=cv2.BORDER_REFLECT_101)
                 frames_lr.append(cv2.cvtColor(frame_lr, cv2.COLOR_BGR2YUV)[:, :, 0])
                 if k == args.temporal_radius:
                     frame_hr = cv2.cvtColor(frames[k], cv2.COLOR_BGR2YUV)[:, :, 0]
@@ -133,7 +140,7 @@ def process_video(video_path, scd, writer, args):
                             feature['hr'] = bytes_feature(hr_block.tostring())
                             for k in range(len(frames_lr)):
                                 lr_block = frames_lr[k][y * args.stride:y * args.stride + args.block_size,
-                                           x * args.stride:x * args.stride + args.block_size]
+                                                        x * args.stride:x * args.stride + args.block_size]
                                 feature['lr' + str(k)] = bytes_feature(lr_block.tostring())
                             example = tf.train.Example(features=tf.train.Features(feature=feature))
                             writer.write(example.SerializeToString())
@@ -174,14 +181,20 @@ def get_arguments():
                         help='size of blocks to extract from low resolution image')
     parser.add_argument('--stride', default=17, type=int,
                         help='stride between extracted blocks for low resolution image')
-    parser.add_argument('--block_min_std', default=1.0, type=float,
+    parser.add_argument('--block_min_std', default=8.0, type=float,
                         help='minimum pixel standard deviation for blocks')
-    parser.add_argument('--crop_height', default=540, type=int,
-                        help='height of high resolution image when using full images dataset, '
-                             'can be cropped to match scale factor')
-    parser.add_argument('--crop_width', default=960, type=int,
-                        help='width of high resolution image when using full images dataset, '
-                             'can be cropped to match scale factor')
+    parser.add_argument('--crop', action='store_true',
+                        help='Whether to crop images')
+    parser.add_argument('--crop_height', default=1800, type=int,
+                        help='height of high resolution image, can be additionally cropped to match scale factor')
+    parser.add_argument('--crop_width', default=3400, type=int,
+                        help='width of high resolution image, can be additionally cropped to match scale factor')
+    parser.add_argument('--blur', action='store_true',
+                        help='Whether to blur low resolution images')
+    parser.add_argument('--blur_size', default=5, type=int,
+                        help='Filter size, used to blur low resolution images')
+    parser.add_argument('--blur_sigma', default=.1, type=float,
+                        help='Gaussian blur sigma, used to blur low resolution images')
 
     return parser.parse_args()
 

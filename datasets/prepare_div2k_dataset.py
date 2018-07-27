@@ -29,6 +29,9 @@ def get_arguments():
     parser.add_argument('--crop_width', default=2040, type=int,
                         help='width of high resolution image to crop to when using full images dataset, '
                              'can be additionally cropped to match scale factor')
+    parser.add_argument('--temporal_radius', default=0, type=int,
+                        help='number of previous and next neighboring frames, used to duplicate low-res samples to '
+                             'use dataset for video super-resolution models')
 
     return parser.parse_args()
 
@@ -71,17 +74,17 @@ def main():
                     hr_block = image[
                             y * args.stride * args.scale_factor:(y * args.stride + args.block_size) * args.scale_factor,
                             x * args.stride * args.scale_factor:(x * args.stride + args.block_size) * args.scale_factor]
-                    example = tf.train.Example(features=tf.train.Features(feature={
-                        'lr1': bytes_feature(lr_block.tostring()),
-                        'hr': bytes_feature(hr_block.tostring())
-                    }))
+                    feature = {'hr': bytes_feature(hr_block.tostring())}
+                    for i in range(2 * args.temporal_radius + 1):
+                        feature['lr' + str(i)] = bytes_feature(lr_block.tostring())
+                    example = tf.train.Example(features=tf.train.Features(feature=feature))
                     writer.write(example.SerializeToString())
                     examples_num += 1
         elif args.type == 'full':
-            example = tf.train.Example(features=tf.train.Features(feature={
-                'lr1': bytes_feature(image_lr.tostring()),
-                'hr': bytes_feature(image.tostring())
-            }))
+            feature = {'hr': bytes_feature(image.tostring())}
+            for i in range(2 * args.temporal_radius + 1):
+                feature['lr' + str(i)] = bytes_feature(image_lr.tostring())
+            example = tf.train.Example(features=tf.train.Features(feature=feature))
             writer.write(example.SerializeToString())
             examples_num += 1
 
@@ -91,7 +94,8 @@ def main():
         dataset_info.write(str(args.scale_factor) + '\n')
         height = args.block_size if args.type == 'blocks' else args.crop_height // args.scale_factor
         width = args.block_size if args.type == 'blocks' else args.crop_width // args.scale_factor
-        dataset_info.write('lr1,' + str(height) + ',' + str(width) + ',1' + '\n')
+        for i in range(2 * args.temporal_radius + 1):
+            dataset_info.write('lr' + str(i) + ',' + str(height) + ',' + str(width) + ',1' + '\n')
         dataset_info.write('hr,' + str(height * args.scale_factor) + ',' + str(width * args.scale_factor) + ',1' + '\n')
 
     writer.close()
