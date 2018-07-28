@@ -2,8 +2,8 @@
 
 source train_eval.sh
 
-TRAINING_LOGDIR=logdir/srcnn_batch_32_lr_1e-3_decay_adam_div2k/train
-EVAL_LOGDIR=logdir/srcnn_batch_32_lr_1e-3_decay_adam_div2k/test
+TRAINING_LOGDIR=logdir/srcnn_batch_32_lr_1e-3_decay_adam/train
+EVAL_LOGDIR=logdir/srcnn_batch_32_lr_1e-3_decay_adam/test
 TRAINING_DATASET_PATH=datasets/train_div2k/dataset.tfrecords
 TRAINING_DATASET_INFO_PATH=datasets/train_div2k/dataset_info.txt
 TESTING_DATASET_PATH=datasets/test_div2k/dataset.tfrecords
