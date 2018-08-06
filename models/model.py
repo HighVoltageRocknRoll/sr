@@ -48,6 +48,10 @@ class Model(ABC):
         pass
 
     @staticmethod
+    def get_model_weights(sess):
+        return dict([(var.name, sess.run(var)) for var in tf.trainable_variables()])
+
+    @staticmethod
     def dump_model_weights(output_path, sess):
         variables = dict([(var.name, sess.run(var).flatten().tolist()) for var in tf.trainable_variables()])
         with open(output_path, 'w') as json_file:

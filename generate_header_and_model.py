@@ -64,6 +64,49 @@ def dump_to_file(file, values, name):
     file.write('\n};\n')
 
 
+def write_conv_layer(kernel, bias, activation, model_file):
+    kernel = np.transpose(kernel, [3, 0, 1, 2])
+    np.array([1, activation, kernel.shape[3], kernel.shape[0], kernel.shape[1]], dtype=np.uint32).tofile(model_file)
+    kernel.tofile(model_file)
+    bias.tofile(model_file)
+
+
+def write_depth_to_space_layer(block_size, model_file):
+    np.array([2, block_size], dtype=np.uint32).tofile(model_file)
+
+
+def prepare_native_mf_srcnn(weights, model_file):
+    np.array([3], dtype=np.uint32).tofile(model_file)
+    write_conv_layer(weights['srcnn/conv1/kernel:0'], weights['srcnn/conv1/bias:0'], 0, model_file)
+    write_conv_layer(weights['srcnn/conv2/kernel:0'], weights['srcnn/conv2/bias:0'], 0, model_file)
+    write_conv_layer(weights['srcnn/conv3/kernel:0'], weights['srcnn/conv3/bias:0'], 0, model_file)
+
+
+def prepare_native_mf_espcn(weights, model_file, scale_factor):
+    np.array([4], dtype=np.uint32).tofile(model_file)
+    write_conv_layer(weights['espcn/conv1/kernel:0'], weights['espcn/conv1/bias:0'], 1, model_file)
+    write_conv_layer(weights['espcn/conv2/kernel:0'], weights['espcn/conv2/bias:0'], 1, model_file)
+    write_conv_layer(weights['espcn/conv3/kernel:0'], weights['espcn/conv3/bias:0'], 2, model_file)
+    write_depth_to_space_layer(scale_factor, model_file)
+
+
+def prepare_native_mf_vespcn(weights, model_file, scale_factor):
+    np.array([6], dtype=np.uint32).tofile(model_file)
+    write_conv_layer(weights['vespcn/conv1/kernel:0'], weights['vespcn/conv1/bias:0'], 0, model_file)
+    write_conv_layer(weights['vespcn/conv2/kernel:0'], weights['vespcn/conv2/bias:0'], 0, model_file)
+    write_conv_layer(weights['vespcn/conv3/kernel:0'], weights['vespcn/conv3/bias:0'], 0, model_file)
+    write_conv_layer(weights['vespcn/conv4/kernel:0'], weights['vespcn/conv4/bias:0'], 0, model_file)
+    write_conv_layer(weights['vespcn/conv5/kernel:0'], weights['vespcn/conv5/bias:0'], 0, model_file)
+    write_depth_to_space_layer(scale_factor, model_file)
+
+
+def prepare_native_mf_vsrnet(weights, model_file):
+    np.array([3], dtype=np.uint32).tofile(model_file)
+    write_conv_layer(weights['vsrnet/conv1/kernel:0'], weights['vsrnet/conv1/bias:0'], 0, model_file)
+    write_conv_layer(weights['vsrnet/conv2/kernel:0'], weights['vsrnet/conv2/bias:0'], 0, model_file)
+    write_conv_layer(weights['vsrnet/conv3/kernel:0'], weights['vsrnet/conv3/bias:0'], 0, model_file)
+
+
 def main():
     args = get_arguments()
 
@@ -89,7 +132,7 @@ def main():
         input_ph = model.get_placeholder()
         predicted = model.load_model(input_ph)
 
-        if args.use_mc:
+        if args.model == 'vespcn':
             predicted = predicted[2]
         predicted = tf.identity(predicted, name='y')
 
@@ -97,6 +140,17 @@ def main():
             args.ckpt_path = tf.train.latest_checkpoint(args.ckpt_path)
         saver = tf.train.Saver()
         saver.restore(sess, args.ckpt_path)
+
+        with open(os.path.join(args.output_folder, args.model + '.model'), 'wb') as native_mf:
+            weights = model.get_model_weights(sess)
+            if args.model == 'srcnn':
+                prepare_native_mf_srcnn(weights, native_mf)
+            elif args.model == 'espcn':
+                prepare_native_mf_espcn(weights, native_mf, args.scale_factor)
+            elif args.model == 'vespcn':
+                prepare_native_mf_vespcn(weights, native_mf, args.scale_factor)
+            elif args.model == 'vsrnet':
+                prepare_native_mf_vsrnet(weights, native_mf)
 
         with open(os.path.join(args.output_folder, 'dnn_' + args.model + '.h'), 'w') as header:
             header.write('/**\n')
@@ -119,49 +173,6 @@ def main():
 
             for name, value in var_dict.items():
                 dump_to_file(header, value, name)
-
-            header.write('\nstatic const float* ' + args.model + '_consts[] = {\n')
-            names = list(var_dict.keys())
-            for i in range(len(names)):
-                header.write('    ' + names[i])
-                if i != len(names) - 1:
-                    header.write(',')
-                header.write('\n')
-            header.write('};\n')
-
-            header.write('\nstatic const long int* ' + args.model + '_consts_dims[] = {\n')
-            for i in range(len(names)):
-                header.write('    ' + names[i] + '_dims')
-                if i != len(names) - 1:
-                    header.write(',')
-                header.write('\n')
-            header.write('};\n')
-
-            header.write('\nstatic const int ' + args.model + '_consts_dims_len[] = {\n')
-            for i in range(len(names)):
-                header.write('    ' + str(len(var_dict[names[i]].shape)))
-                if i != len(names) - 1:
-                    header.write(',')
-                header.write('\n')
-            header.write('};\n')
-
-            activations = ['Relu', 'Tanh', 'Sigmoid']
-            activations_in_graph = [n.name.split('/')[-1] for n in tf.get_default_graph().as_graph_def().node
-                                    if n.name.split('/')[-1] in activations]
-            unique_activations = []
-            for activation in activations_in_graph:
-                if activation not in unique_activations:
-                    unique_activations.append(activation)
-                    header.write('\nstatic const char ' + args.model + '_' + activation.lower() + '[] = "'
-                                 + activation + '";\n')
-
-            header.write('\nstatic const char* ' + args.model + '_activations[] = {\n')
-            for i in range(len(activations_in_graph)):
-                header.write('    ' + args.model + '_' + activations_in_graph[i].lower())
-                if i != len(activations_in_graph) - 1:
-                    header.write(',')
-                header.write('\n')
-            header.write('};\n\n')
 
             header.write('#endif\n')
 
