@@ -14,7 +14,7 @@ To train provided models you should prepare datasets first using generate_datase
 
 ## Model generation
 
-To generate TensorFlow's binary model files, that can be used in ffmpeg's sr filter, use generate_header_and_model.py script. It additionally produces header files (that are used for internal models in ffmpeg) and json files with trained weights. To use this script specify at least what model to generate and path to the checkpoint files (that can be a folder with several checkpoints, in this case latest checkpoint will be used). For example, to generate model files for trained ESPCN model following command can be used:
+To generate binary model files, that can be used in ffmpeg's sr filter, use generate_header_and_model.py script. It additionally produces header files (that are used for internal models in ffmpeg). To use this script specify at least what model to generate and path to the checkpoint files (that can be a folder with several checkpoints, in this case latest checkpoint will be used). For example, to generate model files for trained ESPCN model following command can be used:
 
     python3 generate_header_and_model.py --model=espcn --ckpt_path=logdir/espcn_batch_32_lr_1e-3_decay_adam/train
 
