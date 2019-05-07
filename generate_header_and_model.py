@@ -8,6 +8,11 @@ from models.model_vespcn import VESPCN
 from models.model_vsrnet import VSRnet
 from collections import OrderedDict
 
+@enum.unique
+class Padding(enum.Enum):
+    Valid = 0
+    Same = 1
+    Same_clamp_to_edge = 2
 
 def get_arguments():
     parser = argparse.ArgumentParser(description='generate c header with model weights and binary model file')
@@ -64,9 +69,9 @@ def dump_to_file(file, values, name):
     file.write('\n};\n')
 
 
-def write_conv_layer(kernel, bias, activation, model_file):
+def write_conv_layer(kernel, bias, padding, activation, model_file):
     kernel = np.transpose(kernel, [3, 0, 1, 2])
-    np.array([1, activation, kernel.shape[3], kernel.shape[0], kernel.shape[1]], dtype=np.uint32).tofile(model_file)
+    np.array([1, padding.value, activation, kernel.shape[3], kernel.shape[0], kernel.shape[1]], dtype=np.uint32).tofile(model_file)
     kernel.tofile(model_file)
     bias.tofile(model_file)
 
@@ -77,34 +82,34 @@ def write_depth_to_space_layer(block_size, model_file):
 
 def prepare_native_mf_srcnn(weights, model_file):
     np.array([3], dtype=np.uint32).tofile(model_file)
-    write_conv_layer(weights['srcnn/conv1/kernel:0'], weights['srcnn/conv1/bias:0'], 0, model_file)
-    write_conv_layer(weights['srcnn/conv2/kernel:0'], weights['srcnn/conv2/bias:0'], 0, model_file)
-    write_conv_layer(weights['srcnn/conv3/kernel:0'], weights['srcnn/conv3/bias:0'], 0, model_file)
+    write_conv_layer(weights['srcnn/conv1/kernel:0'], weights['srcnn/conv1/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['srcnn/conv2/kernel:0'], weights['srcnn/conv2/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['srcnn/conv3/kernel:0'], weights['srcnn/conv3/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
 
 
 def prepare_native_mf_espcn(weights, model_file, scale_factor):
     np.array([4], dtype=np.uint32).tofile(model_file)
-    write_conv_layer(weights['espcn/conv1/kernel:0'], weights['espcn/conv1/bias:0'], 1, model_file)
-    write_conv_layer(weights['espcn/conv2/kernel:0'], weights['espcn/conv2/bias:0'], 1, model_file)
-    write_conv_layer(weights['espcn/conv3/kernel:0'], weights['espcn/conv3/bias:0'], 2, model_file)
+    write_conv_layer(weights['espcn/conv1/kernel:0'], weights['espcn/conv1/bias:0'], Padding.Same_clamp_to_edge, 1, model_file)
+    write_conv_layer(weights['espcn/conv2/kernel:0'], weights['espcn/conv2/bias:0'], Padding.Same_clamp_to_edge, 1, model_file)
+    write_conv_layer(weights['espcn/conv3/kernel:0'], weights['espcn/conv3/bias:0'], Padding.Same_clamp_to_edge, 2, model_file)
     write_depth_to_space_layer(scale_factor, model_file)
 
 
 def prepare_native_mf_vespcn(weights, model_file, scale_factor):
     np.array([6], dtype=np.uint32).tofile(model_file)
-    write_conv_layer(weights['vespcn/conv1/kernel:0'], weights['vespcn/conv1/bias:0'], 0, model_file)
-    write_conv_layer(weights['vespcn/conv2/kernel:0'], weights['vespcn/conv2/bias:0'], 0, model_file)
-    write_conv_layer(weights['vespcn/conv3/kernel:0'], weights['vespcn/conv3/bias:0'], 0, model_file)
-    write_conv_layer(weights['vespcn/conv4/kernel:0'], weights['vespcn/conv4/bias:0'], 0, model_file)
-    write_conv_layer(weights['vespcn/conv5/kernel:0'], weights['vespcn/conv5/bias:0'], 0, model_file)
+    write_conv_layer(weights['vespcn/conv1/kernel:0'], weights['vespcn/conv1/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vespcn/conv2/kernel:0'], weights['vespcn/conv2/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vespcn/conv3/kernel:0'], weights['vespcn/conv3/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vespcn/conv4/kernel:0'], weights['vespcn/conv4/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vespcn/conv5/kernel:0'], weights['vespcn/conv5/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
     write_depth_to_space_layer(scale_factor, model_file)
 
 
 def prepare_native_mf_vsrnet(weights, model_file):
     np.array([3], dtype=np.uint32).tofile(model_file)
-    write_conv_layer(weights['vsrnet/conv1/kernel:0'], weights['vsrnet/conv1/bias:0'], 0, model_file)
-    write_conv_layer(weights['vsrnet/conv2/kernel:0'], weights['vsrnet/conv2/bias:0'], 0, model_file)
-    write_conv_layer(weights['vsrnet/conv3/kernel:0'], weights['vsrnet/conv3/bias:0'], 0, model_file)
+    write_conv_layer(weights['vsrnet/conv1/kernel:0'], weights['vsrnet/conv1/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vsrnet/conv2/kernel:0'], weights['vsrnet/conv2/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
+    write_conv_layer(weights['vsrnet/conv3/kernel:0'], weights['vsrnet/conv3/bias:0'], Padding.Same_clamp_to_edge, 0, model_file)
 
 
 def main():
