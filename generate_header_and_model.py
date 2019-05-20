@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import os
+import enum
 from models.model_espcn import ESPCN
 from models.model_srcnn import SRCNN
 from models.model_vespcn import VESPCN
