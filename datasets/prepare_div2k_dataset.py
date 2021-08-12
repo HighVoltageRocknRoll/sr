@@ -2,7 +2,10 @@ import os
 import argparse
 from tqdm import tqdm
 import cv2
-import tensorflow as tf
+try:
+    import tensorflow.compat.v1 as tf
+except ImportError:
+    import tensorflow as tf
 
 
 def bytes_feature(value):

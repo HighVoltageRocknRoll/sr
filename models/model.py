@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
-import tensorflow as tf
+try:
+    import tensorflow.compat.v1 as tf
+except ImportError:
+    import tensorflow as tf
 import json
 from .dataset import Dataset
 
